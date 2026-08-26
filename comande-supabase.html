@@ -939,10 +939,10 @@ function updateAuthUI(session){
   const appShell = document.getElementById('app-shell');
   if (session) {
     loginView.style.display = 'none';
-    appShell.style.display = '';
+    appShell.style.display = 'block';
     boot();
   } else {
-    loginView.style.display = '';
+    loginView.style.display = 'flex';
     appShell.style.display = 'none';
   }
 }
