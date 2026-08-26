@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Comande</title>
+<style>
+  :root{
+    --bg: #1a1611;
+    --surface: #241f18;
+    --surface-raised: #2e281f;
+    --border: #453a2b;
+    --text: #f3ece0;
+    --muted: #9c8f78;
+    --prima: #e0a72e;
+    --prima-dim: #4a3d1f;
+    --pizza: #d1451f;
+    --pizza-dim: #4a281c;
+    --asporto: #4f8fd1;
+    --asporto-dim: #223349;
+    --done: #55624c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    padding-bottom: 40px;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px 0;
+  }
+  h1 {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .tabs { display: flex; gap: 6px; margin-bottom: -1px; }
+  .tab {
+    flex: 1;
+    padding: 12px 0;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--pizza); }
+  main { padding: 16px; max-width: 720px; margin: 0 auto; }
+
+  /* ---- Login (magic link) ---- */
+  #view-login, #app-shell { display: none; }
+  .login-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .login-box { max-width: 340px; width: 100%; }
+  .login-box h1 { margin: 0 0 20px; }
+  #login-status { margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 18px; }
+
+  /* ---- Riepilogo aggregato ---- */
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+  .summary-col { background: var(--surface); border-radius: 10px; padding: 10px; min-height: 60px; }
+  .summary-col h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 8px; font-weight: 800; }
+  .summary-col.prima h3 { color: var(--prima); }
+  .summary-col.pizza h3 { color: var(--pizza); }
+  .summary-col.asporto h3 { color: var(--asporto); }
+  .summary-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+  .summary-row .qty { font-variant-numeric: tabular-nums; font-weight: 800; }
+  .summary-empty { color: var(--muted); font-size: 12px; }
+
+  /* ---- Ticket comanda ---- */
+  .ticket {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    position: relative;
+  }
+  .ticket.ticket-slow { border-color: var(--pizza); box-shadow: 0 0 0 1px var(--pizza); }
+  .ticket::before {
+    content: "";
+    display: block;
+    height: 8px;
+    background-image: linear-gradient(135deg, var(--bg) 50%, transparent 50%),
+                       linear-gradient(45deg, var(--bg) 50%, transparent 50%);
+    background-size: 12px 12px;
+    background-position: bottom;
+    background-repeat: repeat-x;
+  }
+  .ticket-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; row-gap: 4px;
+    padding: 12px 14px 6px;
+  }
+  .ticket-head-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
+  .ticket-table { font-size: 22px; font-weight: 800; }
+  .ticket-pos { font-size: 12px; color: var(--muted); margin-left: 8px; font-weight: 500; }
+  .ticket-slow-tag {
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    color: var(--pizza); background: var(--pizza-dim);
+    padding: 2px 6px; border-radius: 4px; margin-left: 8px;
+  }
+  .ticket-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ticket-del { background: none; border: none; color: var(--muted); font-size: 18px; padding: 4px 8px; cursor: pointer; }
+  .ticket-items { padding: 4px 10px 10px; }
+  .item-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .item-row + .item-row { border-top: 1px solid var(--border); }
+  .item-row.asporto-due { box-shadow: inset 4px 0 0 var(--asporto); background: var(--asporto-dim); }
+  .item-row.asporto-late { box-shadow: inset 4px 0 0 var(--pizza); background: var(--pizza-dim); }
+  .item-check {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--muted);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 900;
+  }
+  .item-row.done .item-check { background: var(--done); border-color: var(--done); color: var(--bg); }
+  .item-fase-tag {
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+  }
+  .item-fase-tag.prima { background: var(--prima-dim); color: var(--prima); }
+  .item-fase-tag.pizza { background: var(--pizza-dim); color: var(--pizza); }
+  .item-fase-tag.asporto { background: var(--asporto-dim); color: var(--asporto); }
+  .item-orario { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .item-name { flex: 1; font-size: 15px; font-weight: 600; }
+  .item-row.done .item-name { color: var(--muted); text-decoration: line-through; }
+  .item-qty { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 15px; color: var(--muted); }
+  .ticket-close {
+    display: block; width: calc(100% - 20px); margin: 4px 10px 12px;
+    padding: 10px; border-radius: 6px; border: none;
+    background: var(--done); color: var(--bg); font-weight: 800; font-size: 13px;
+    cursor: pointer;
+  }
+  .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 14px; }
+
+  /* ---- Asporto (vista dedicata) ---- */
+  .asporto-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; }
+  .asporto-card + .asporto-card { margin-top: 0; }
+
+  /* ---- Tavoli (prenotazioni) ---- */
+  .tavolo-suggestions {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; z-index: 5; display: none; max-height: 240px; overflow-y: auto;
+  }
+  .tavolo-suggestions.show { display: block; }
+  .tavolo-suggestion { padding: 10px 12px; font-size: 15px; cursor: pointer; }
+  .tavolo-suggestion + .tavolo-suggestion { border-top: 1px solid var(--border); }
+  .tavolo-suggestion:active { background: var(--surface); }
+  .fase-pill.sel.prenotato { background: var(--prima-dim); color: var(--prima); border-color: var(--prima); }
+  .fase-pill.sel.arrivato { background: var(--asporto-dim); color: var(--asporto); border-color: var(--asporto); }
+  .fase-pill.sel.servito { background: var(--surface-raised); color: var(--muted); border-color: var(--done); }
+  .ticket.tavolo-servito { opacity: 0.55; }
+
+  /* ---- Toast promemoria ---- */
+  #toast-container {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 12px; pointer-events: none;
+  }
+  .toast {
+    background: var(--pizza); color: #fff2ec;
+    border-radius: 10px; padding: 14px 16px;
+    font-size: 14px; font-weight: 700;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    max-width: 720px; margin: 0 auto; width: 100%;
+    pointer-events: auto; cursor: pointer;
+  }
+  .toast.slow { background: var(--asporto); }
+
+  /* ---- Form nuova comanda ---- */
+  label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 800; margin: 14px 0 6px; }
+  input[type=text], input[type=number], input[type=time], input[type=email] {
+    width: 100%; padding: 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 16px;
+  }
+  input[type=time] { width: auto; max-width: 150px; }
+  .row2 { display: flex; flex-direction: column; gap: 0; }
+  .new-item-row {
+    background: var(--surface-raised); border-radius: 8px; padding: 10px; margin-top: 10px;
+  }
+  .new-item-row .top { display: flex; gap: 8px; align-items: center; }
+  .new-item-row input[type=text] { flex: 1; }
+  .new-item-row .asporto-fields { margin-top: 4px; }
+  .new-item-row .asporto-fields label { margin: 10px 0 4px; }
+  .qty-stepper { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 8px; padding: 4px; }
+  .qty-stepper button { width: 30px; height: 30px; border-radius: 6px; border: none; background: var(--border); color: var(--text); font-size: 18px; font-weight: 800; cursor: pointer; }
+  .qty-stepper span { min-width: 20px; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .fase-pills { display: flex; gap: 6px; margin-top: 8px; }
+  .fase-pill {
+    flex: 1; padding: 8px 0; text-align: center; border-radius: 6px;
+    font-size: 12px; font-weight: 800; text-transform: uppercase;
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    cursor: pointer;
+  }
+  .fase-pill.sel.prima { background: var(--prima-dim); color: var(--prima); border-color: var(--prima); }
+  .fase-pill.sel.pizza { background: var(--pizza-dim); color: var(--pizza); border-color: var(--pizza); }
+  .fase-pill.sel.asporto { background: var(--asporto-dim); color: var(--asporto); border-color: var(--asporto); }
+  .remove-item { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0 4px; }
+  .add-item-btn, .submit-btn {
+    width: 100%; padding: 14px; margin-top: 14px; border-radius: 8px; border: none;
+    font-size: 15px; font-weight: 800; cursor: pointer;
+  }
+  .add-item-btn { background: var(--surface-raised); color: var(--text); border: 1px dashed var(--border); }
+  .submit-btn { background: var(--pizza); color: #fff2ec; }
+  .submit-btn:disabled { opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<div id="view-login" class="login-shell">
+  <div class="login-box">
+    <h1>Comande</h1>
+    <label>Email</label>
+    <input type="email" id="in-email" placeholder="tuaemail@esempio.it" autocomplete="email">
+    <button class="submit-btn" id="btn-send-link">Invia link di accesso</button>
+    <div id="login-status"></div>
+  </div>
+</div>
+
+<div id="app-shell">
+  <header>
+    <h1>Comande
+      <button id="btn-test-suono" style="font-size:11px;font-weight:800;background:var(--surface-raised);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:4px 8px;letter-spacing:normal;text-transform:none;cursor:pointer;vertical-align:middle;margin-left:8px">Test suono 🔊</button>
+      <button id="btn-logout" style="font-size:11px;font-weight:800;background:none;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:4px 8px;letter-spacing:normal;text-transform:none;cursor:pointer;vertical-align:middle;margin-left:8px">Esci</button>
+    </h1>
+    <div class="tabs">
+      <button class="tab active" data-tab="cucina">Cucina</button>
+      <button class="tab" data-tab="asporto">Asporto</button>
+      <button class="tab" data-tab="tavoli">Tavoli</button>
+      <button class="tab" data-tab="nuova">Nuova comanda</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="view-cucina"></div>
+    <div id="view-asporto" style="display:none"></div>
+    <div id="view-tavoli" style="display:none"></div>
+    <div id="view-nuova" style="display:none"></div>
+  </main>
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const SUPABASE_URL = 'https://kmsglpgwpapwdpbkgawd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_gnmTWFBDxEgz5i3z0-q5TA_pul3qOHw';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const FASI = ['prima', 'pizza', 'asporto'];
+const FASE_LABEL = { prima: 'Prima', pizza: 'Pizza', asporto: 'Asporto' };
+const SLOW_ORDER_MS = 15 * 60 * 1000;
+let orders = [];
+let tavoli = [];
+let newItems = [];
+let currentTavolo = '';
+let currentPosizione = '';
+let loaded = false;
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ---- Audio: promemoria sonori generati via Web Audio API, nessun asset esterno ---- */
+let audioCtx = null;
+function ensureAudio(){
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = new Ctx();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  // Trucco di sblocco per iOS: solo resume() a volte non basta, serve far
+  // suonare davvero un buffer (anche silenzioso) dentro il gesto dell'utente.
+  const buffer = audioCtx.createBuffer(1, 1, 22050);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(audioCtx.destination);
+  src.start(0);
+}
+['pointerdown', 'touchstart', 'mousedown'].forEach(ev => document.addEventListener(ev, ensureAudio));
+
+function playTone(freq, dur, type, vol){
+  type = type || 'sine';
+  vol = vol != null ? vol : 0.3;
+  if (!audioCtx) return;
+  const fire = () => {
+    if (audioCtx.state !== 'running') return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur / 1000);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur / 1000 + 0.02);
+  };
+  // iOS sospende l'AudioContext se resta inattivo troppo a lungo: prima di ogni
+  // suono proviamo a riattivarlo, non basta lo sblocco iniziale al primo tocco.
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(fire).catch(() => {});
+  } else {
+    fire();
+  }
+}
+// Chime a due note (tipo notifica), più presente di un beep piatto ma breve.
+function playChime(notes){
+  let t = 0;
+  notes.forEach(([freq, dur]) => {
+    setTimeout(() => playTone(freq, dur, 'triangle', 0.45), t);
+    t += dur + 40;
+  });
+}
+function playAlert(){ playChime([[988, 140], [1318, 220]]); }
+function playUrgentAlert(){ playChime([[988, 120], [1318, 120], [988, 120], [1318, 240]]); }
+
+function showToast(message, kind){
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind === 'slow' ? ' slow' : '');
+  el.textContent = message;
+  el.addEventListener('click', () => el.remove());
+  container.appendChild(el);
+}
+
+/* ---- Tracciamento allarmi già suonati (persistito, per non risuonare al reload) ---- */
+function loadFired(){
+  try { return new Set(JSON.parse(localStorage.getItem('comande_fired') || '[]')); }
+  catch(e){ return new Set(); }
+}
+function saveFired(){ localStorage.setItem('comande_fired', JSON.stringify([...fired])); }
+let fired = loadFired();
+
+function pruneFired(){
+  const valid = new Set();
+  orders.forEach(o => {
+    valid.add('slow-' + o.id);
+    o.items.forEach(it => { valid.add('pre-' + it.id); valid.add('due-' + it.id); });
+  });
+  let changed = false;
+  [...fired].forEach(k => { if (!valid.has(k)) { fired.delete(k); changed = true; } });
+  if (changed) saveFired();
+}
+
+function checkReminders(){
+  const now = Date.now();
+  let changed = false;
+  orders.forEach(o => {
+    const allDone = o.items.length > 0 && o.items.every(it => it.evaso);
+    if (!allDone && (now - o.timestamp) > SLOW_ORDER_MS) {
+      const key = 'slow-' + o.id;
+      if (!fired.has(key)) {
+        fired.add(key); changed = true; playAlert();
+        showToast(`⏰ Tavolo ${o.tavolo}: comanda aperta da più di 15 minuti`, 'slow');
+      }
+    }
+    o.items.forEach(it => {
+      if (it.fase !== 'asporto' || it.evaso) return;
+      const preavvisoTs = it.orarioTs - (it.preavviso || 0) * 60000;
+      const preKey = 'pre-' + it.id, dueKey = 'due-' + it.id;
+      if (now >= preavvisoTs && !fired.has(preKey)) {
+        fired.add(preKey); changed = true; playAlert();
+        showToast(`🥡 ${o.tavolo}: iniziare ${it.nome} — ritiro alle ${fmtTime(it.orarioTs)}`);
+      }
+      if (now >= it.orarioTs && !fired.has(dueKey)) {
+        fired.add(dueKey); changed = true; playUrgentAlert();
+        showToast(`🥡 ${o.tavolo}: ${it.nome} — orario di ritiro raggiunto!`);
+      }
+    });
+  });
+  if (changed) saveFired();
+}
+
+/* ---- Orario di ritiro asporto: HH:MM -> timestamp (oggi, o domani se già molto passato) ---- */
+function computeOrarioTs(orarioStr, refTs){
+  const [h, m] = orarioStr.split(':').map(Number);
+  const ref = new Date(refTs);
+  const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), h, m, 0, 0);
+  let ts = d.getTime();
+  if (ts - refTs < -3 * 60 * 60 * 1000) ts += 24 * 60 * 60 * 1000;
+  return ts;
+}
+
+function asportoState(it){
+  if (it.fase !== 'asporto' || it.evaso) return null;
+  const now = Date.now();
+  const preavvisoTs = it.orarioTs - (it.preavviso || 0) * 60000;
+  if (now >= it.orarioTs) return 'late';
+  if (now >= preavvisoTs) return 'due';
+  return 'wait';
+}
+
+/* ---- Persistenza dati (Supabase: tabella app_state, una riga per 'ordini' e una per 'tavoli') ---- */
+async function loadOrders(){
+  const { data, error } = await supabase.from('app_state').select('value').eq('key', 'ordini').single();
+  if (error) {
+    console.error('Errore caricamento', error);
+    orders = [];
+    alert('Impossibile contattare Supabase. Controlla la connessione.');
+  } else {
+    orders = data.value || [];
+  }
+  loaded = true;
+  pruneFired();
+  checkReminders();
+  renderCucina();
+}
+
+async function loadTavoli(){
+  const { data, error } = await supabase.from('app_state').select('value').eq('key', 'tavoli').single();
+  if (error) {
+    console.error('Errore caricamento tavoli', error);
+    tavoli = [];
+  } else {
+    tavoli = data.value || [];
+  }
+}
+
+async function saveOrders(){
+  const { error } = await supabase.from('app_state')
+    .update({ value: orders, updated_at: new Date().toISOString() })
+    .eq('key', 'ordini');
+  if (error) {
+    console.error('Errore salvataggio', error);
+    alert('Impossibile salvare: controlla la connessione.');
+  }
+}
+
+async function saveTavoli(){
+  const { error } = await supabase.from('app_state')
+    .update({ value: tavoli, updated_at: new Date().toISOString() })
+    .eq('key', 'tavoli');
+  if (error) {
+    console.error('Errore salvataggio tavoli', error);
+    alert('Impossibile salvare: controlla la connessione.');
+  }
+}
+
+// Applica una riga fresca (da realtime o da polling di fallback) e ridisegna
+// la tab attiva, cosí un ordine/tavolo inserito da un altro dispositivo
+// compare qui senza dover ricaricare la pagina.
+function applyFreshRow(row){
+  if (row.key === 'ordini' && Array.isArray(row.value)) orders = row.value;
+  if (row.key === 'tavoli' && Array.isArray(row.value)) tavoli = row.value;
+  pruneFired();
+  checkReminders();
+  const activeTab = document.querySelector('.tab.active').dataset.tab;
+  if (activeTab === 'cucina') renderCucina();
+  if (activeTab === 'asporto') renderAsporto();
+  if (activeTab === 'tavoli') renderTavoli();
+}
+
+// Fallback silenzioso nel caso il canale realtime si sia disconnesso.
+async function pollState(){
+  const { data, error } = await supabase.from('app_state').select('key,value');
+  if (error) { console.error('Errore polling', error); return; }
+  data.forEach(applyFreshRow);
+}
+
+function subscribeRealtime(){
+  supabase.channel('app_state_changes')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'app_state' }, payload => applyFreshRow(payload.new))
+    .subscribe();
+}
+
+function fmtTime(ts){
+  const d = new Date(ts);
+  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+}
+
+function renderCucina(){
+  const el = document.getElementById('view-cucina');
+  if (!loaded){ el.innerHTML = '<div class="empty-state">Carico...</div>'; return; }
+
+  // riepilogo aggregato
+  const agg = { prima: {}, pizza: {}, asporto: {} };
+  orders.forEach(o => o.items.forEach(it => {
+    if (it.evaso) return;
+    agg[it.fase][it.nome] = (agg[it.fase][it.nome] || 0) + it.qty;
+  }));
+
+  let summaryHtml = '<div class="summary">';
+  FASI.forEach(f => {
+    const rows = Object.entries(agg[f]);
+    summaryHtml += `<div class="summary-col ${f}"><h3>${FASE_LABEL[f]}</h3>`;
+    if (rows.length === 0) {
+      summaryHtml += '<div class="summary-empty">Niente</div>';
+    } else {
+      rows.forEach(([nome, qty]) => {
+        summaryHtml += `<div class="summary-row"><span>${escapeHtml(nome)}</span><span class="qty">${qty}</span></div>`;
+      });
+    }
+    summaryHtml += '</div>';
+  });
+  summaryHtml += '</div>';
+
+  // ticket per tavolo
+  let ticketsHtml = '';
+  if (orders.length === 0) {
+    ticketsHtml = '<div class="empty-state">Nessuna comanda aperta.<br>Vai su "Nuova comanda" per iniziare.</div>';
+  } else {
+    orders.slice().sort((a,b) => a.timestamp - b.timestamp).forEach(o => {
+      const allDone = o.items.length > 0 && o.items.every(it => it.evaso);
+      const tooSlow = !allDone && (Date.now() - o.timestamp) > SLOW_ORDER_MS;
+      ticketsHtml += `<div class="ticket ${tooSlow ? 'ticket-slow' : ''}" data-order="${o.id}">
+        <div class="ticket-head">
+          <div><span class="ticket-table">${escapeHtml(o.tavolo)}</span><span class="ticket-pos">${escapeHtml(o.posizione || '')}</span>${tooSlow ? '<span class="ticket-slow-tag">In ritardo</span>' : ''}</div>
+          <div class="ticket-head-actions">
+            <span class="ticket-time">${fmtTime(o.timestamp)}</span>
+            <button class="ticket-del" data-action="del-order" data-order="${o.id}">✕</button>
+          </div>
+        </div>
+        <div class="ticket-items">`;
+      o.items.forEach(it => {
+        const state = asportoState(it);
+        const stateCls = state === 'late' ? 'asporto-late' : state === 'due' ? 'asporto-due' : '';
+        ticketsHtml += `<div class="item-row ${it.evaso ? 'done' : ''} ${stateCls}" data-action="toggle-item" data-order="${o.id}" data-item="${it.id}">
+          <div class="item-check">${it.evaso ? '✓' : ''}</div>
+          <span class="item-fase-tag ${it.fase}">${FASE_LABEL[it.fase]}</span>
+          ${it.fase === 'asporto' ? `<span class="item-orario">${fmtTime(it.orarioTs)}</span>` : ''}
+          <span class="item-name">${escapeHtml(it.nome)}</span>
+          <span class="item-qty">×${it.qty}</span>
+        </div>`;
+      });
+      ticketsHtml += `</div>`;
+      if (allDone) {
+        ticketsHtml += `<button class="ticket-close" data-action="close-order" data-order="${o.id}">Chiudi comanda ✓</button>`;
+      }
+      ticketsHtml += `</div>`;
+    });
+  }
+
+  el.innerHTML = summaryHtml + ticketsHtml;
+
+  el.querySelectorAll('[data-action="toggle-item"]').forEach(row => {
+    row.addEventListener('click', () => {
+      const oid = row.dataset.order, iid = row.dataset.item;
+      const o = orders.find(x => x.id === oid);
+      const it = o.items.find(x => x.id === iid);
+      it.evaso = !it.evaso;
+      saveOrders();
+      renderCucina();
+    });
+  });
+  el.querySelectorAll('[data-action="close-order"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      orders = orders.filter(o => o.id !== btn.dataset.order);
+      saveOrders();
+      renderCucina();
+    });
+  });
+  el.querySelectorAll('[data-action="del-order"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (confirm('Eliminare questa comanda?')) {
+        orders = orders.filter(o => o.id !== btn.dataset.order);
+        saveOrders();
+        renderCucina();
+      }
+    });
+  });
+}
+
+function renderAsporto(){
+  const el = document.getElementById('view-asporto');
+  if (!loaded){ el.innerHTML = '<div class="empty-state">Carico...</div>'; return; }
+
+  const rows = [];
+  orders.forEach(o => o.items.forEach(it => {
+    if (it.fase === 'asporto') rows.push({ o, it });
+  }));
+  rows.sort((a, b) => a.it.orarioTs - b.it.orarioTs);
+
+  if (rows.length === 0) {
+    el.innerHTML = '<div class="empty-state">Nessun asporto in coda.</div>';
+    return;
+  }
+
+  let html = '';
+  rows.forEach(({ o, it }) => {
+    const state = asportoState(it);
+    const stateCls = it.evaso ? 'done' : state === 'late' ? 'asporto-late' : state === 'due' ? 'asporto-due' : '';
+    const statusLabel = it.evaso ? 'Pronto' : state === 'late' ? 'IN RITARDO' : state === 'due' ? 'DA PREPARARE ORA' : 'In coda';
+    html += `<div class="asporto-card item-row ${stateCls}" data-action="toggle-item" data-order="${o.id}" data-item="${it.id}">
+      <div class="item-check">${it.evaso ? '✓' : ''}</div>
+      <div style="flex:1">
+        <div style="font-weight:800">${escapeHtml(o.tavolo)} — ${escapeHtml(it.nome)} ×${it.qty}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Ritiro ${fmtTime(it.orarioTs)} · ${statusLabel}</div>
+      </div>
+    </div>`;
+  });
+  el.innerHTML = html;
+
+  el.querySelectorAll('[data-action="toggle-item"]').forEach(row => {
+    row.addEventListener('click', () => {
+      const oid = row.dataset.order, iid = row.dataset.item;
+      const o = orders.find(x => x.id === oid);
+      const it = o.items.find(x => x.id === iid);
+      it.evaso = !it.evaso;
+      saveOrders();
+      renderCucina();
+      renderAsporto();
+    });
+  });
+}
+
+const STATI_TAVOLO = ['prenotato', 'arrivato', 'servito'];
+const STATO_TAVOLO_LABEL = { prenotato: 'Prenotato', arrivato: 'Arrivato', servito: 'Servito' };
+
+function tavoloNome(t){ return t.nome || t.posizione || 'Tavolo'; }
+function tavoloStato(t){ return t.stato || 'prenotato'; }
+
+// Il form di aggiunta viene costruito una volta sola e non viene mai
+// ricreato dai refresh periodici (poll/realtime), altrimenti ogni volta
+// che scattava un refresh mentre si stava compilando (es. mentre si sceglie
+// l'orario col time-picker nativo, operazione lenta) i campi già inseriti
+// sparivano. Solo la lista sotto viene aggiornata liberamente.
+function renderTavoli(){
+  const el = document.getElementById('view-tavoli');
+  if (!loaded){ el.innerHTML = '<div class="empty-state">Carico...</div>'; return; }
+
+  if (!document.getElementById('tavolo-form')) {
+    el.innerHTML = `
+      <div class="new-item-row" id="tavolo-form">
+        <label>Tavolo</label>
+        <input type="text" id="in-tavolo-nome" placeholder="Es. 12, o Dehors 3">
+        <label>Posizione (opzionale)</label>
+        <input type="text" id="in-tavolo-posizione" placeholder="Es. dietro palma, ombrellone">
+        <div class="row2">
+          <div>
+            <label>Orario (opzionale)</label>
+            <input type="time" id="in-tavolo-orario">
+          </div>
+          <div>
+            <label>Persone (opzionale)</label>
+            <input type="number" min="1" id="in-tavolo-persone" placeholder="Es. 4">
+          </div>
+        </div>
+        <button class="submit-btn" id="btn-add-tavolo">+ Aggiungi prenotazione</button>
+      </div>
+      <div id="tavolo-list" style="margin-top:16px"></div>
+    `;
+    document.getElementById('btn-add-tavolo').addEventListener('click', () => {
+      const nomeInput = document.getElementById('in-tavolo-nome');
+      const posizioneInput = document.getElementById('in-tavolo-posizione');
+      const orarioInput = document.getElementById('in-tavolo-orario');
+      const personeInput = document.getElementById('in-tavolo-persone');
+      const nome = nomeInput.value.trim();
+      const posizione = posizioneInput.value.trim();
+      if (!nome && !posizione) { alert('Serve almeno un nome o una posizione.'); return; }
+      tavoli.push({
+        id: uid(),
+        nome, posizione,
+        orario: orarioInput.value || '',
+        persone: personeInput.value ? parseInt(personeInput.value, 10) : null,
+        stato: 'prenotato',
+        createdTs: Date.now()
+      });
+      saveTavoli();
+      nomeInput.value = ''; posizioneInput.value = ''; orarioInput.value = ''; personeInput.value = '';
+      renderTavoloList();
+    });
+  }
+
+  renderTavoloList();
+}
+
+function renderTavoloList(){
+  const el = document.getElementById('tavolo-list');
+  if (!el) return;
+
+  if (tavoli.length === 0) {
+    el.innerHTML = '<div class="empty-state">Nessuna prenotazione in lista.</div>';
+    return;
+  }
+
+  const sorted = tavoli.slice().sort((a, b) => {
+    if (!a.orario && !b.orario) return a.createdTs - b.createdTs;
+    if (!a.orario) return 1;
+    if (!b.orario) return -1;
+    return a.orario.localeCompare(b.orario);
+  });
+  let html = '';
+  sorted.forEach(t => {
+    const stato = tavoloStato(t);
+    html += `<div class="ticket ${stato === 'servito' ? 'tavolo-servito' : ''}" data-tavolo="${t.id}">
+      <div class="ticket-head">
+        <div><span class="ticket-table">${escapeHtml(tavoloNome(t))}</span>${t.nome && t.posizione ? `<span class="ticket-pos">${escapeHtml(t.posizione)}</span>` : ''}${t.persone ? `<span class="ticket-pos">${t.persone} persone</span>` : ''}</div>
+        <div class="ticket-head-actions">
+          ${t.orario ? `<span class="ticket-time">${escapeHtml(t.orario)}</span>` : ''}
+          <button class="ticket-del" data-action="del-tavolo" data-tavolo="${t.id}">✕</button>
+        </div>
+      </div>
+      <div class="ticket-items">
+        <div class="fase-pills">
+          ${STATI_TAVOLO.map(s => `<div class="fase-pill ${stato===s?'sel '+s:''}" data-action="set-stato-tavolo" data-tavolo="${t.id}" data-stato="${s}">${STATO_TAVOLO_LABEL[s]}</div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  });
+  el.innerHTML = html;
+
+  el.querySelectorAll('[data-action="del-tavolo"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      tavoli = tavoli.filter(t => t.id !== btn.dataset.tavolo);
+      saveTavoli();
+      renderTavoloList();
+    });
+  });
+  el.querySelectorAll('[data-action="set-stato-tavolo"]').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const t = tavoli.find(x => x.id === pill.dataset.tavolo);
+      t.stato = pill.dataset.stato;
+      saveTavoli();
+      renderTavoloList();
+    });
+  });
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderNuova(){
+  const el = document.getElementById('view-nuova');
+  let html = `
+    <label>Tavolo</label>
+    <div style="position:relative">
+      <input type="text" id="in-tavolo" placeholder="Es. 12, o Dehors 3" value="${escapeHtml(currentTavolo)}" autocomplete="off">
+      <div id="tavolo-suggestions" class="tavolo-suggestions"></div>
+    </div>
+    <label>Posizione (opzionale)</label>
+    <input type="text" id="in-posizione" placeholder="Es. dietro palma, ombrellone" value="${escapeHtml(currentPosizione)}">
+    <label style="margin-top:20px">Prodotti</label>
+  `;
+  newItems.forEach((it, i) => {
+    html += `<div class="new-item-row" data-idx="${i}">
+      <div class="top">
+        <input type="text" class="in-nome" placeholder="Prodotto" value="${escapeHtml(it.nome)}">
+        <div class="qty-stepper">
+          <button data-action="qty-dec" data-idx="${i}">−</button>
+          <span>${it.qty}</span>
+          <button data-action="qty-inc" data-idx="${i}">+</button>
+        </div>
+        <button class="remove-item" data-action="remove-item" data-idx="${i}">✕</button>
+      </div>
+      <div class="fase-pills">
+        ${FASI.map(f => `<div class="fase-pill ${it.fase===f?'sel '+f:''}" data-action="set-fase" data-idx="${i}" data-fase="${f}">${FASE_LABEL[f]}</div>`).join('')}
+      </div>
+      ${it.fase === 'asporto' ? `
+      <div class="row2 asporto-fields">
+        <div>
+          <label>Orario ritiro</label>
+          <input type="time" class="in-orario" data-idx="${i}" value="${it.orarioStr || ''}">
+        </div>
+        <div>
+          <label>Promemoria (min prima)</label>
+          <input type="number" min="0" class="in-preavviso" data-idx="${i}" value="${it.preavviso != null ? it.preavviso : 15}">
+        </div>
+      </div>` : ''}
+    </div>`;
+  });
+  html += `<button class="add-item-btn" id="btn-add-item">+ Aggiungi prodotto</button>`;
+  html += `<button class="submit-btn" id="btn-submit">Invia comanda</button>`;
+  el.innerHTML = html;
+
+  const tavoloInput = document.getElementById('in-tavolo');
+  const tavoloSuggestBox = document.getElementById('tavolo-suggestions');
+  function renderTavoloSuggestions(){
+    const q = tavoloInput.value.trim().toLowerCase();
+    const matches = q === '' ? tavoli : tavoli.filter(t =>
+      (t.nome && t.nome.toLowerCase().includes(q)) || (t.posizione && t.posizione.toLowerCase().includes(q))
+    );
+    if (matches.length === 0) { tavoloSuggestBox.classList.remove('show'); tavoloSuggestBox.innerHTML = ''; return; }
+    tavoloSuggestBox.innerHTML = matches.map(t => {
+      const sub = [t.nome && t.posizione ? t.posizione : '', t.orario || ''].filter(Boolean).join(' · ');
+      return `<div class="tavolo-suggestion" data-id="${t.id}" data-nome="${escapeHtml(tavoloNome(t))}">${escapeHtml(tavoloNome(t))}${sub ? ` <span style="color:var(--muted);font-size:12px">· ${escapeHtml(sub)}</span>` : ''}</div>`;
+    }).join('');
+    tavoloSuggestBox.classList.add('show');
+  }
+  tavoloInput.addEventListener('input', e => { currentTavolo = e.target.value; renderTavoloSuggestions(); });
+  tavoloInput.addEventListener('focus', renderTavoloSuggestions);
+  tavoloInput.addEventListener('blur', () => { setTimeout(() => tavoloSuggestBox.classList.remove('show'), 150); });
+  tavoloSuggestBox.addEventListener('click', e => {
+    const item = e.target.closest('.tavolo-suggestion');
+    if (!item) return;
+    const t = tavoli.find(x => x.id === item.dataset.id);
+    currentTavolo = item.dataset.nome;
+    tavoloInput.value = currentTavolo;
+    if (t && t.nome && t.posizione) {
+      currentPosizione = t.posizione;
+      document.getElementById('in-posizione').value = currentPosizione;
+    }
+    tavoloSuggestBox.classList.remove('show');
+  });
+  document.getElementById('in-posizione').addEventListener('input', e => { currentPosizione = e.target.value; });
+
+  document.getElementById('btn-add-item').addEventListener('click', () => {
+    newItems.push({ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15 });
+    renderNuova();
+  });
+  el.querySelectorAll('.in-nome').forEach((inp, i) => {
+    inp.addEventListener('input', () => { newItems[i].nome = inp.value; });
+  });
+  el.querySelectorAll('[data-action="qty-inc"]').forEach(b => {
+    b.addEventListener('click', () => { newItems[b.dataset.idx].qty++; renderNuova(); });
+  });
+  el.querySelectorAll('[data-action="qty-dec"]').forEach(b => {
+    b.addEventListener('click', () => {
+      const idx = b.dataset.idx;
+      if (newItems[idx].qty > 1) newItems[idx].qty--;
+      renderNuova();
+    });
+  });
+  el.querySelectorAll('[data-action="remove-item"]').forEach(b => {
+    b.addEventListener('click', () => { newItems.splice(b.dataset.idx, 1); renderNuova(); });
+  });
+  el.querySelectorAll('[data-action="set-fase"]').forEach(b => {
+    b.addEventListener('click', () => { newItems[b.dataset.idx].fase = b.dataset.fase; renderNuova(); });
+  });
+  el.querySelectorAll('.in-orario').forEach(inp => {
+    inp.addEventListener('input', () => { newItems[inp.dataset.idx].orarioStr = inp.value; });
+  });
+  el.querySelectorAll('.in-preavviso').forEach(inp => {
+    inp.addEventListener('input', () => { newItems[inp.dataset.idx].preavviso = parseInt(inp.value, 10) || 0; });
+  });
+  document.getElementById('btn-submit').addEventListener('click', submitOrder);
+}
+
+async function submitOrder(){
+  const tavolo = currentTavolo.trim();
+  const posizione = currentPosizione.trim();
+  const items = newItems.filter(it => it.nome.trim() !== '');
+  if (!tavolo || items.length === 0) {
+    alert('Serve almeno un tavolo e un prodotto.');
+    return;
+  }
+  for (const it of items) {
+    if (it.fase === 'asporto' && !it.orarioStr) {
+      alert("Serve l'orario di ritiro per i prodotti da asporto.");
+      return;
+    }
+  }
+  const now = Date.now();
+  orders.push({
+    id: uid(),
+    tavolo, posizione,
+    timestamp: now,
+    items: items.map(it => {
+      const item = { id: uid(), nome: it.nome.trim(), qty: it.qty, fase: it.fase, evaso: false };
+      if (it.fase === 'asporto') {
+        item.orarioTs = computeOrarioTs(it.orarioStr, now);
+        item.preavviso = (it.preavviso !== null && it.preavviso !== undefined && it.preavviso !== '') ? it.preavviso : 15;
+      }
+      return item;
+    })
+  });
+  await saveOrders();
+
+  // Se il tavolo inserito corrisponde a una prenotazione ancora "prenotato"
+  // (per nome o posizione), la portiamo automaticamente ad "arrivato" — lo
+  // stato resta comunque modificabile a mano dal tab Tavoli.
+  const tavoloLower = tavolo.toLowerCase();
+  const matchedTavolo = tavoli.find(t =>
+    (t.nome && t.nome.trim().toLowerCase() === tavoloLower) ||
+    (t.posizione && t.posizione.trim().toLowerCase() === tavoloLower)
+  );
+  if (matchedTavolo && tavoloStato(matchedTavolo) === 'prenotato') {
+    matchedTavolo.stato = 'arrivato';
+    saveTavoli();
+  }
+
+  newItems = [{ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15 }];
+  currentTavolo = '';
+  currentPosizione = '';
+  renderNuova();
+  switchTab('cucina');
+}
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.getElementById('view-cucina').style.display = name === 'cucina' ? '' : 'none';
+  document.getElementById('view-asporto').style.display = name === 'asporto' ? '' : 'none';
+  document.getElementById('view-tavoli').style.display = name === 'tavoli' ? '' : 'none';
+  document.getElementById('view-nuova').style.display = name === 'nuova' ? '' : 'none';
+  if (name === 'cucina') renderCucina();
+  if (name === 'asporto') renderAsporto();
+  if (name === 'tavoli') renderTavoli();
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => switchTab(t.dataset.tab));
+});
+
+document.getElementById('btn-test-suono').addEventListener('click', () => {
+  ensureAudio();
+  const state = audioCtx ? audioCtx.state : 'nessun AudioContext (non supportato?)';
+  playAlert();
+  showToast(`🔊 Test suono avviato — stato audio: ${state}`);
+});
+
+/* ---- Autenticazione (magic link) ---- */
+let booted = false;
+
+async function boot(){
+  if (booted) return;
+  booted = true;
+  newItems = [{ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15 }];
+  renderNuova();
+  await loadOrders();
+  await loadTavoli();
+  renderTavoli();
+  subscribeRealtime();
+  setInterval(() => { if (loaded) pollState(); }, 60000);
+}
+
+function updateAuthUI(session){
+  const loginView = document.getElementById('view-login');
+  const appShell = document.getElementById('app-shell');
+  if (session) {
+    loginView.style.display = 'none';
+    appShell.style.display = '';
+    boot();
+  } else {
+    loginView.style.display = '';
+    appShell.style.display = 'none';
+  }
+}
+
+supabase.auth.onAuthStateChange((_event, session) => updateAuthUI(session));
+supabase.auth.getSession().then(({ data }) => updateAuthUI(data.session));
+
+document.getElementById('btn-send-link').addEventListener('click', async () => {
+  const emailInput = document.getElementById('in-email');
+  const statusEl = document.getElementById('login-status');
+  const btn = document.getElementById('btn-send-link');
+  const email = emailInput.value.trim();
+  if (!email) return;
+  btn.disabled = true;
+  statusEl.textContent = 'Invio in corso...';
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin + window.location.pathname }
+  });
+  btn.disabled = false;
+  statusEl.textContent = error ? 'Errore: ' + error.message : 'Controlla la tua email e apri il link ricevuto.';
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => supabase.auth.signOut());
+</script>
+
+</body>
+</html>
