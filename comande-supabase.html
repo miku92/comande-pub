@@ -271,6 +271,7 @@ const FASE_LABEL = { prima: 'Prima', pizza: 'Pizza', asporto: 'Asporto' };
 const SLOW_ORDER_MS = 15 * 60 * 1000;
 let orders = [];
 let tavoli = [];
+let seenOrderIds = new Set();
 let newItems = [];
 let currentTavolo = '';
 let currentPosizione = '';
@@ -332,6 +333,7 @@ function playChime(notes){
 }
 function playAlert(){ playChime([[988, 140], [1318, 220]]); }
 function playUrgentAlert(){ playChime([[988, 120], [1318, 120], [988, 120], [1318, 240]]); }
+function playNewOrderChime(){ playChime([[659, 100], [880, 100], [1318, 200]]); }
 
 function showToast(message, kind){
   const container = document.getElementById('toast-container');
@@ -419,6 +421,7 @@ async function loadOrders(){
   } else {
     orders = data.value || [];
   }
+  seenOrderIds = new Set(orders.map(o => o.id));
   loaded = true;
   pruneFired();
   checkReminders();
@@ -459,7 +462,15 @@ async function saveTavoli(){
 // la tab attiva, cosí un ordine/tavolo inserito da un altro dispositivo
 // compare qui senza dover ricaricare la pagina.
 function applyFreshRow(row){
-  if (row.key === 'ordini' && Array.isArray(row.value)) orders = row.value;
+  if (row.key === 'ordini' && Array.isArray(row.value)) {
+    const nuove = row.value.filter(o => !seenOrderIds.has(o.id));
+    orders = row.value;
+    seenOrderIds = new Set(orders.map(o => o.id));
+    if (loaded && nuove.length > 0) {
+      nuove.forEach(o => showToast(`🆕 Nuova comanda: ${o.tavolo}`));
+      playNewOrderChime();
+    }
+  }
   if (row.key === 'tavoli' && Array.isArray(row.value)) tavoli = row.value;
   pruneFired();
   checkReminders();
@@ -862,7 +873,7 @@ async function submitOrder(){
     }
   }
   const now = Date.now();
-  orders.push({
+  const nuovaComanda = {
     id: uid(),
     tavolo, posizione,
     timestamp: now,
@@ -874,7 +885,9 @@ async function submitOrder(){
       }
       return item;
     })
-  });
+  };
+  orders.push(nuovaComanda);
+  seenOrderIds.add(nuovaComanda.id);
   await saveOrders();
 
   // Se il tavolo inserito corrisponde a una prenotazione ancora "prenotato"
