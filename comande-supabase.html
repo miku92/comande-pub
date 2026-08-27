@@ -144,6 +144,7 @@
   .item-fase-tag.asporto { background: var(--asporto-dim); color: var(--asporto); }
   .item-orario { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
   .item-name { flex: 1; font-size: 15px; font-weight: 600; }
+  .item-note { display: block; font-size: 11px; color: var(--muted); font-style: italic; font-weight: 500; margin-top: 2px; }
   .item-row.done .item-name { color: var(--muted); text-decoration: line-through; }
   .item-qty { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 15px; color: var(--muted); }
   .ticket-close {
@@ -206,6 +207,8 @@
   .in-nome-wrap { position: relative; flex: 1; }
   .new-item-row .asporto-fields { margin-top: 4px; }
   .new-item-row .asporto-fields label { margin: 10px 0 4px; }
+  .new-item-row .note-field { margin-top: 8px; }
+  .new-item-row .note-field label { margin: 0 0 4px; }
   .qty-stepper { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 8px; padding: 4px; }
   .qty-stepper button { width: 30px; height: 30px; border-radius: 6px; border: none; background: var(--border); color: var(--text); font-size: 18px; font-weight: 800; cursor: pointer; }
   .qty-stepper span { min-width: 20px; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -610,7 +613,7 @@ function renderCucina(){
           <div class="item-check">${it.evaso ? '✓' : ''}</div>
           <span class="item-fase-tag ${it.fase}">${FASE_LABEL[it.fase]}</span>
           ${it.fase === 'asporto' ? `<span class="item-orario">${fmtTime(it.orarioTs)}</span>` : ''}
-          <span class="item-name">${escapeHtml(it.nome)}</span>
+          <span class="item-name">${escapeHtml(it.nome)}${it.note ? `<span class="item-note">${escapeHtml(it.note)}</span>` : ''}</span>
           <span class="item-qty">×${it.qty}</span>
         </div>`;
       });
@@ -685,6 +688,7 @@ function renderAsporto(){
       <div style="flex:1">
         <div style="font-weight:800">${escapeHtml(o.tavolo)} — ${escapeHtml(it.nome)} ×${it.qty}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">Ritiro ${fmtTime(it.orarioTs)} · ${statusLabel}</div>
+        ${it.note ? `<div class="item-note">${escapeHtml(it.note)}</div>` : ''}
       </div>
     </div>`;
   });
@@ -851,6 +855,10 @@ function renderNuova(){
       <div class="fase-pills">
         ${FASI.map(f => `<div class="fase-pill ${it.fase===f?'sel '+f:''}" data-action="set-fase" data-idx="${i}" data-fase="${f}">${FASE_LABEL[f]}</div>`).join('')}
       </div>
+      <div class="note-field">
+        <label>Note (opzionale)</label>
+        <input type="text" class="in-note" data-idx="${i}" placeholder="Es. poco pomodoro, qualche acciuga in più" value="${escapeHtml(it.note || '')}">
+      </div>
       ${it.fase === 'asporto' ? `
       <div class="row2 asporto-fields">
         <div>
@@ -900,7 +908,7 @@ function renderNuova(){
   document.getElementById('in-posizione').addEventListener('input', e => { currentPosizione = e.target.value; });
 
   document.getElementById('btn-add-item').addEventListener('click', () => {
-    newItems.push({ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15 });
+    newItems.push({ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15, note: '' });
     renderNuova();
   });
   el.querySelectorAll('.in-nome').forEach((inp, i) => {
@@ -945,6 +953,9 @@ function renderNuova(){
   el.querySelectorAll('.in-preavviso').forEach(inp => {
     inp.addEventListener('input', () => { newItems[inp.dataset.idx].preavviso = parseInt(inp.value, 10) || 0; });
   });
+  el.querySelectorAll('.in-note').forEach(inp => {
+    inp.addEventListener('input', () => { newItems[inp.dataset.idx].note = inp.value; });
+  });
   document.getElementById('btn-submit').addEventListener('click', submitOrder);
 }
 
@@ -983,6 +994,7 @@ async function submitOrder(){
       timestamp: now,
       items: gruppo.map(it => {
         const item = { id: uid(), nome: it.nome.trim(), qty: it.qty, fase: it.fase, evaso: false };
+        if (it.note && it.note.trim()) item.note = it.note.trim();
         if (it.fase === 'asporto') {
           item.orarioTs = computeOrarioTs(it.orarioStr, now);
           item.preavviso = (it.preavviso !== null && it.preavviso !== undefined && it.preavviso !== '') ? it.preavviso : 15;
@@ -1013,7 +1025,7 @@ async function submitOrder(){
     saveTavoli();
   }
 
-  newItems = [{ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15 }];
+  newItems = [{ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15, note: '' }];
   currentTavolo = '';
   currentPosizione = '';
   renderNuova();
@@ -1048,7 +1060,7 @@ let booted = false;
 async function boot(){
   if (booted) return;
   booted = true;
-  newItems = [{ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15 }];
+  newItems = [{ nome: '', qty: 1, fase: 'pizza', orarioStr: '', preavviso: 15, note: '' }];
   renderNuova();
   await loadOrders();
   await loadTavoli();
