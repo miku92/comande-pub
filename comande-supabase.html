@@ -203,6 +203,7 @@
   }
   .new-item-row .top { display: flex; gap: 8px; align-items: center; }
   .new-item-row input[type=text] { flex: 1; }
+  .in-nome-wrap { position: relative; flex: 1; }
   .new-item-row .asporto-fields { margin-top: 4px; }
   .new-item-row .asporto-fields label { margin: 10px 0 4px; }
   .qty-stepper { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 8px; padding: 4px; }
@@ -275,6 +276,33 @@ const FASI = ['prima', 'pizza', 'asporto'];
 // La fase interna resta "pizza" per non dover rinominare classi CSS/variabili
 // di colore in giro per il file, ma in UI si chiama "Dopo".
 const FASE_LABEL = { prima: 'Prima', pizza: 'Dopo', asporto: 'Asporto' };
+
+// Elenco piatti dal menù, usato solo per suggerire durante la digitazione nel
+// campo "Prodotto" (non limita l'inserimento: resta testo libero). Menù non
+// necessariamente aggiornato — va ritoccato a mano quando cambia.
+const MENU = [
+  'Aperitivo + bibita', 'Antipasto misto della casa', 'Crocchette di carne',
+  "Arancino di riso alla 'nduja", 'Tagliere di salumi e formaggi',
+  "Involtini di melanzane con 'nduja e mozzarella", 'Salsiccia bianca e fagioli',
+  'Insalata di verdure grigliate e scamorza alla piastra',
+  'Bocconcini di mozzarella e pancetta speziata', 'Bruschette assortite',
+  'Hamburger di chianina', 'Spiedini di pollo e pancetta',
+  'Patatine fritte', 'Patatine fritte limone e pepe nero',
+  'Patatine fritte alla paprika piccante', 'Patatine fritte e salsiccia bianca',
+  'Patatine fritte e würstel',
+  'Americano', 'Cheesebaconburger', 'Joeburger',
+  'Clubsandwiches', 'Chicken sandwiches', 'Atlantic sandwiches',
+  'Tirolese sandwiches', 'Mortadella sandwiches',
+  'Margherita', 'Napoletana', 'Nostromo', 'Diavola', 'Rucolona', 'Chef',
+  'Silana', 'Valentina', 'Scarpariello', 'Tom Tom', 'Regina', 'Luganega',
+  'Luna del pizzaiolo', 'Sole e luna', 'Carbonara', 'Norma', 'Vegetariana',
+  'Augustus', 'Prosciutto e funghi', 'Del Conte', 'Tropeana', 'Caprese',
+  'Siciliana', 'Pistacchio', 'Bufalotta', 'Calabra', 'Salmone', 'Del re',
+  'Quattro stagioni', 'Quattro formaggi', 'Nutella',
+  'Calzone Napoletano', 'Calzone Classico', 'Calzone Pachinese',
+  'Birra Riegele Privat', 'Birra Riegele Weizen', 'Birra Riegele Augustus Weizen',
+  'Coca Cola', 'Fanta', 'Sprite', 'Acqua tonica', 'Acqua naturale', 'Acqua frizzante'
+];
 const SLOW_ORDER_MS = 15 * 60 * 1000;
 let orders = [];
 let tavoli = [];
@@ -809,7 +837,10 @@ function renderNuova(){
   newItems.forEach((it, i) => {
     html += `<div class="new-item-row" data-idx="${i}">
       <div class="top">
-        <input type="text" class="in-nome" placeholder="Prodotto" value="${escapeHtml(it.nome)}">
+        <div class="in-nome-wrap">
+          <input type="text" class="in-nome" placeholder="Prodotto" value="${escapeHtml(it.nome)}" autocomplete="off" data-idx="${i}">
+          <div class="tavolo-suggestions prodotto-suggestions" data-idx="${i}"></div>
+        </div>
         <div class="qty-stepper">
           <button data-action="qty-dec" data-idx="${i}">−</button>
           <span>${it.qty}</span>
@@ -873,7 +904,24 @@ function renderNuova(){
     renderNuova();
   });
   el.querySelectorAll('.in-nome').forEach((inp, i) => {
-    inp.addEventListener('input', () => { newItems[i].nome = inp.value; });
+    const box = el.querySelector(`.prodotto-suggestions[data-idx="${i}"]`);
+    function renderProdottoSuggestions(){
+      const q = inp.value.trim().toLowerCase();
+      const matches = q === '' ? MENU : MENU.filter(nome => nome.toLowerCase().includes(q));
+      if (matches.length === 0) { box.classList.remove('show'); box.innerHTML = ''; return; }
+      box.innerHTML = matches.map(nome => `<div class="tavolo-suggestion" data-nome="${escapeHtml(nome)}">${escapeHtml(nome)}</div>`).join('');
+      box.classList.add('show');
+    }
+    inp.addEventListener('input', () => { newItems[i].nome = inp.value; renderProdottoSuggestions(); });
+    inp.addEventListener('focus', renderProdottoSuggestions);
+    inp.addEventListener('blur', () => { setTimeout(() => box.classList.remove('show'), 150); });
+    box.addEventListener('click', e => {
+      const item = e.target.closest('.tavolo-suggestion');
+      if (!item) return;
+      newItems[i].nome = item.dataset.nome;
+      inp.value = item.dataset.nome;
+      box.classList.remove('show');
+    });
   });
   el.querySelectorAll('[data-action="qty-inc"]').forEach(b => {
     b.addEventListener('click', () => { newItems[b.dataset.idx].qty++; renderNuova(); });
