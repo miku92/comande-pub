@@ -110,6 +110,11 @@
     color: var(--pizza); background: var(--pizza-dim);
     padding: 2px 6px; border-radius: 4px; margin-left: 8px;
   }
+  .ticket-wait-tag {
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    color: var(--muted); background: var(--surface-raised);
+    padding: 2px 6px; border-radius: 4px; margin-left: 8px;
+  }
   .ticket-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .ticket-del { background: none; border: none; color: var(--muted); font-size: 18px; padding: 4px 8px; cursor: pointer; }
   .ticket-items { padding: 4px 10px 10px; }
@@ -370,7 +375,27 @@ function pruneFired(){
 // in ritardo solo perché la comanda è aperta da più di 15 minuti, ha il suo
 // promemoria dedicato più sotto.
 function isOrderSlow(o){
-  return o.items.some(it => it.fase !== 'asporto' && !it.evaso) && (Date.now() - o.timestamp) > SLOW_ORDER_MS;
+  if (o.waitingForPrima) return false;
+  const start = o.dopoReadyAt || o.timestamp;
+  return o.items.some(it => it.fase !== 'asporto' && !it.evaso) && (Date.now() - start) > SLOW_ORDER_MS;
+}
+
+// Margine per dare tempo di mangiare il Prima prima che scatti il conteggio
+// dei 15 minuti sul Dopo collegato. Per ora stesso valore della soglia "in
+// ritardo" (15 min) su scelta esplicita — in futuro si può stimare in base
+// a commensali/quantità invece di un valore fisso.
+const EATING_BUFFER_MS = 15 * 60 * 1000;
+
+// Sblocca il conteggio dei ticket "Dopo" in attesa del Prima dello stesso
+// gruppo. immediate=true quando il Prima viene cancellato prima di essere
+// evaso (niente margine per mangiare, non è mai stato servito nulla).
+function releaseDopoSiblings(groupId, immediate){
+  orders.forEach(o => {
+    if (o.groupId === groupId && o.waitingForPrima) {
+      o.waitingForPrima = false;
+      o.dopoReadyAt = Date.now() + (immediate ? 0 : EATING_BUFFER_MS);
+    }
+  });
 }
 
 function checkReminders(){
@@ -543,7 +568,7 @@ function renderCucina(){
       const tooSlow = isOrderSlow(o);
       ticketsHtml += `<div class="ticket ${tooSlow ? 'ticket-slow' : ''}" data-order="${o.id}">
         <div class="ticket-head">
-          <div><span class="ticket-table">${escapeHtml(o.tavolo)}</span><span class="ticket-pos">${escapeHtml(o.posizione || '')}</span>${tooSlow ? '<span class="ticket-slow-tag">In ritardo</span>' : ''}</div>
+          <div><span class="ticket-table">${escapeHtml(o.tavolo)}</span><span class="ticket-pos">${escapeHtml(o.posizione || '')}</span>${tooSlow ? '<span class="ticket-slow-tag">In ritardo</span>' : ''}${o.waitingForPrima ? '<span class="ticket-wait-tag">In attesa del Prima</span>' : ''}</div>
           <div class="ticket-head-actions">
             <span class="ticket-time">${fmtTime(o.timestamp)}</span>
             <button class="ticket-del" data-action="del-order" data-order="${o.id}">✕</button>
@@ -576,7 +601,11 @@ function renderCucina(){
       const oid = row.dataset.order, iid = row.dataset.item;
       const o = orders.find(x => x.id === oid);
       const it = o.items.find(x => x.id === iid);
+      const wasAllDone = o.items.every(x => x.evaso);
       it.evaso = !it.evaso;
+      if (o.fase === 'prima' && !wasAllDone && o.items.every(x => x.evaso)) {
+        releaseDopoSiblings(o.groupId, false);
+      }
       saveOrders();
       renderCucina();
     });
@@ -591,7 +620,11 @@ function renderCucina(){
   el.querySelectorAll('[data-action="del-order"]').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm('Eliminare questa comanda?')) {
-        orders = orders.filter(o => o.id !== btn.dataset.order);
+        const o = orders.find(x => x.id === btn.dataset.order);
+        if (o && o.fase === 'prima' && !o.items.every(x => x.evaso)) {
+          releaseDopoSiblings(o.groupId, true);
+        }
+        orders = orders.filter(x => x.id !== btn.dataset.order);
         saveOrders();
         renderCucina();
       }
@@ -884,11 +917,20 @@ async function submitOrder(){
   const now = Date.now();
   // Un ticket separato per ogni fase presente nella comanda (Prima/Dopo/
   // Asporto vanno evasi indipendentemente, non come un blocco unico).
-  const nuoveComande = FASI
+  // Un groupId condivide i ticket nati dallo stesso invio: se c'è sia Prima
+  // che Dopo, il Dopo nasce "in attesa" finché il Prima non è evaso (vedi
+  // isOrderSlow/releaseDopoSiblings).
+  const groupId = uid();
+  const gruppiFase = FASI
     .map(fase => items.filter(it => it.fase === fase))
-    .filter(gruppo => gruppo.length > 0)
-    .map(gruppo => ({
+    .filter(gruppo => gruppo.length > 0);
+  const hasPrima = gruppiFase.some(gruppo => gruppo[0].fase === 'prima');
+  const nuoveComande = gruppiFase.map(gruppo => {
+    const fase = gruppo[0].fase;
+    const ordine = {
       id: uid(),
+      groupId,
+      fase,
       tavolo, posizione,
       timestamp: now,
       items: gruppo.map(it => {
@@ -899,7 +941,13 @@ async function submitOrder(){
         }
         return item;
       })
-    }));
+    };
+    if (fase === 'pizza' && hasPrima) {
+      ordine.waitingForPrima = true;
+      ordine.dopoReadyAt = null;
+    }
+    return ordine;
+  });
   orders.push(...nuoveComande);
   nuoveComande.forEach(o => seenOrderIds.add(o.id));
   await saveOrders();
