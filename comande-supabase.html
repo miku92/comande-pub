@@ -267,7 +267,9 @@ const SUPABASE_KEY = 'sb_publishable_gnmTWFBDxEgz5i3z0-q5TA_pul3qOHw';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const FASI = ['prima', 'pizza', 'asporto'];
-const FASE_LABEL = { prima: 'Prima', pizza: 'Pizza', asporto: 'Asporto' };
+// La fase interna resta "pizza" per non dover rinominare classi CSS/variabili
+// di colore in giro per il file, ma in UI si chiama "Dopo".
+const FASE_LABEL = { prima: 'Prima', pizza: 'Dopo', asporto: 'Asporto' };
 const SLOW_ORDER_MS = 15 * 60 * 1000;
 let orders = [];
 let tavoli = [];
@@ -363,12 +365,19 @@ function pruneFired(){
   if (changed) saveFired();
 }
 
+// "In ritardo" riguarda solo item da servire subito (non asporto): un
+// asporto preso con largo anticipo sull'orario di ritiro non deve risultare
+// in ritardo solo perché la comanda è aperta da più di 15 minuti, ha il suo
+// promemoria dedicato più sotto.
+function isOrderSlow(o){
+  return o.items.some(it => it.fase !== 'asporto' && !it.evaso) && (Date.now() - o.timestamp) > SLOW_ORDER_MS;
+}
+
 function checkReminders(){
   const now = Date.now();
   let changed = false;
   orders.forEach(o => {
-    const allDone = o.items.length > 0 && o.items.every(it => it.evaso);
-    if (!allDone && (now - o.timestamp) > SLOW_ORDER_MS) {
+    if (isOrderSlow(o)) {
       const key = 'slow-' + o.id;
       if (!fired.has(key)) {
         fired.add(key); changed = true; playAlert();
@@ -531,7 +540,7 @@ function renderCucina(){
   } else {
     orders.slice().sort((a,b) => a.timestamp - b.timestamp).forEach(o => {
       const allDone = o.items.length > 0 && o.items.every(it => it.evaso);
-      const tooSlow = !allDone && (Date.now() - o.timestamp) > SLOW_ORDER_MS;
+      const tooSlow = isOrderSlow(o);
       ticketsHtml += `<div class="ticket ${tooSlow ? 'ticket-slow' : ''}" data-order="${o.id}">
         <div class="ticket-head">
           <div><span class="ticket-table">${escapeHtml(o.tavolo)}</span><span class="ticket-pos">${escapeHtml(o.posizione || '')}</span>${tooSlow ? '<span class="ticket-slow-tag">In ritardo</span>' : ''}</div>
@@ -873,21 +882,26 @@ async function submitOrder(){
     }
   }
   const now = Date.now();
-  const nuovaComanda = {
-    id: uid(),
-    tavolo, posizione,
-    timestamp: now,
-    items: items.map(it => {
-      const item = { id: uid(), nome: it.nome.trim(), qty: it.qty, fase: it.fase, evaso: false };
-      if (it.fase === 'asporto') {
-        item.orarioTs = computeOrarioTs(it.orarioStr, now);
-        item.preavviso = (it.preavviso !== null && it.preavviso !== undefined && it.preavviso !== '') ? it.preavviso : 15;
-      }
-      return item;
-    })
-  };
-  orders.push(nuovaComanda);
-  seenOrderIds.add(nuovaComanda.id);
+  // Un ticket separato per ogni fase presente nella comanda (Prima/Dopo/
+  // Asporto vanno evasi indipendentemente, non come un blocco unico).
+  const nuoveComande = FASI
+    .map(fase => items.filter(it => it.fase === fase))
+    .filter(gruppo => gruppo.length > 0)
+    .map(gruppo => ({
+      id: uid(),
+      tavolo, posizione,
+      timestamp: now,
+      items: gruppo.map(it => {
+        const item = { id: uid(), nome: it.nome.trim(), qty: it.qty, fase: it.fase, evaso: false };
+        if (it.fase === 'asporto') {
+          item.orarioTs = computeOrarioTs(it.orarioStr, now);
+          item.preavviso = (it.preavviso !== null && it.preavviso !== undefined && it.preavviso !== '') ? it.preavviso : 15;
+        }
+        return item;
+      })
+    }));
+  orders.push(...nuoveComande);
+  nuoveComande.forEach(o => seenOrderIds.add(o.id));
   await saveOrders();
 
   // Se il tavolo inserito corrisponde a una prenotazione ancora "prenotato"
