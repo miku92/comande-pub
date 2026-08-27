@@ -18,6 +18,8 @@
     --pizza-dim: #f9e0d3;
     --asporto: #1f5a9e;
     --asporto-dim: #dcebfa;
+    --bar: #6b3fa0;
+    --bar-dim: #ede3f7;
     --done: #4a5a40;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -67,12 +69,13 @@
   #login-status { margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 18px; }
 
   /* ---- Riepilogo aggregato ---- */
-  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+  .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; }
   .summary-col { background: var(--surface); border-radius: 10px; padding: 10px; min-height: 60px; }
   .summary-col h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 8px; font-weight: 800; }
   .summary-col.prima h3 { color: var(--prima); }
   .summary-col.pizza h3 { color: var(--pizza); }
   .summary-col.asporto h3 { color: var(--asporto); }
+  .summary-col.bar h3 { color: var(--bar); }
   .summary-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
   .summary-row .qty { font-variant-numeric: tabular-nums; font-weight: 800; }
   .summary-empty { color: var(--muted); font-size: 12px; }
@@ -142,6 +145,7 @@
   .item-fase-tag.prima { background: var(--prima-dim); color: var(--prima); }
   .item-fase-tag.pizza { background: var(--pizza-dim); color: var(--pizza); }
   .item-fase-tag.asporto { background: var(--asporto-dim); color: var(--asporto); }
+  .item-fase-tag.bar { background: var(--bar-dim); color: var(--bar); }
   .item-orario { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
   .item-name { flex: 1; font-size: 15px; font-weight: 600; }
   .item-note { display: block; font-size: 11px; color: var(--muted); font-style: italic; font-weight: 500; margin-top: 2px; }
@@ -222,6 +226,7 @@
   .fase-pill.sel.prima { background: var(--prima-dim); color: var(--prima); border-color: var(--prima); }
   .fase-pill.sel.pizza { background: var(--pizza-dim); color: var(--pizza); border-color: var(--pizza); }
   .fase-pill.sel.asporto { background: var(--asporto-dim); color: var(--asporto); border-color: var(--asporto); }
+  .fase-pill.sel.bar { background: var(--bar-dim); color: var(--bar); border-color: var(--bar); }
   .remove-item { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0 4px; }
   .add-item-btn, .submit-btn {
     width: 100%; padding: 14px; margin-top: 14px; border-radius: 8px; border: none;
@@ -275,10 +280,10 @@ const SUPABASE_URL = 'https://kmsglpgwpapwdpbkgawd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_gnmTWFBDxEgz5i3z0-q5TA_pul3qOHw';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const FASI = ['prima', 'pizza', 'asporto'];
+const FASI = ['prima', 'pizza', 'bar', 'asporto'];
 // La fase interna resta "pizza" per non dover rinominare classi CSS/variabili
 // di colore in giro per il file, ma in UI si chiama "Dopo".
-const FASE_LABEL = { prima: 'Prima', pizza: 'Dopo', asporto: 'Asporto' };
+const FASE_LABEL = { prima: 'Prima', pizza: 'Dopo', bar: 'Bar', asporto: 'Asporto' };
 
 // Elenco piatti dal menù, usato solo per suggerire durante la digitazione nel
 // campo "Prodotto" (non limita l'inserimento: resta testo libero). Menù non
@@ -307,6 +312,7 @@ const MENU = [
   'Coca Cola', 'Fanta', 'Sprite', 'Acqua tonica', 'Acqua naturale', 'Acqua frizzante'
 ];
 const SLOW_ORDER_MS = 15 * 60 * 1000;
+const BAR_SLOW_MS = 5 * 60 * 1000;
 let orders = [];
 let tavoli = [];
 let seenOrderIds = new Set();
@@ -408,7 +414,8 @@ function pruneFired(){
 function isOrderSlow(o){
   if (o.waitingForPrima) return false;
   const start = o.dopoReadyAt || o.timestamp;
-  return o.items.some(it => it.fase !== 'asporto' && !it.evaso) && (Date.now() - start) > SLOW_ORDER_MS;
+  const soglia = o.fase === 'bar' ? BAR_SLOW_MS : SLOW_ORDER_MS;
+  return o.items.some(it => it.fase !== 'asporto' && !it.evaso) && (Date.now() - start) > soglia;
 }
 
 // Margine per dare tempo di mangiare il Prima prima che scatti il conteggio
@@ -568,7 +575,7 @@ function renderCucina(){
   if (!loaded){ el.innerHTML = '<div class="empty-state">Carico...</div>'; return; }
 
   // riepilogo aggregato
-  const agg = { prima: {}, pizza: {}, asporto: {} };
+  const agg = { prima: {}, pizza: {}, bar: {}, asporto: {} };
   orders.forEach(o => o.items.forEach(it => {
     if (it.evaso) return;
     agg[it.fase][it.nome] = (agg[it.fase][it.nome] || 0) + it.qty;
