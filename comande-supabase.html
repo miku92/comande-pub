@@ -235,6 +235,11 @@
   .add-item-btn { background: var(--surface-raised); color: var(--text); border: 1px dashed var(--border); }
   .submit-btn { background: var(--pizza); color: #fff2ec; }
   .submit-btn:disabled { opacity: 0.4; }
+  .danger-btn {
+    width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px;
+    border: 1px solid var(--pizza); background: none; color: var(--pizza);
+    font-size: 13px; font-weight: 800; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -747,9 +752,18 @@ function renderTavoli(){
           </div>
         </div>
         <button class="submit-btn" id="btn-add-tavolo">+ Aggiungi prenotazione</button>
+        <button class="danger-btn" id="btn-clear-tavoli">Cancella tutte le prenotazioni</button>
       </div>
       <div id="tavolo-list" style="margin-top:16px"></div>
     `;
+    document.getElementById('btn-clear-tavoli').addEventListener('click', () => {
+      if (tavoli.length === 0) return;
+      if (confirm('Cancellare tutte le prenotazioni? Operazione non annullabile.')) {
+        tavoli = [];
+        saveTavoli();
+        renderTavoloList();
+      }
+    });
     document.getElementById('btn-add-tavolo').addEventListener('click', () => {
       const nomeInput = document.getElementById('in-tavolo-nome');
       const posizioneInput = document.getElementById('in-tavolo-posizione');
